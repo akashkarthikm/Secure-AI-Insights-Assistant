@@ -1,0 +1,86 @@
+# Production-shaped compose. Reviewers run `docker compose up` and visit
+# http://localhost:8000 to see the system populated and working.
+#
+# Three services:
+#   - db       persistent Postgres
+#   - ingest   one-shot container that generates data, loads the DB, builds
+#              the vector index, then exits
+#   - api      FastAPI backend serving both the chat API and the React
+#              static bundle on port 8000
+#
+# Health checks gate the dependency order: ingest waits for db to be healthy,
+# api waits for ingest to complete successfully.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: insights
+      POSTGRES_USER: insights
+      POSTGRES_PASSWORD: insights_dev_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insights -d insights"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    # No port exposure: only the api container needs to reach Postgres.
+    # Uncomment the next two lines if you want to connect from the host with psql.
+    # ports:
+    #   - "5432:5432"
+
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://insights:insights_dev_password@db:5432/insights
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token-change-in-production}
+    volumes:
+      # Generated artifacts (vector index, audit log) persist across runs
+      # so subsequent `docker compose up` invocations don't re-ingest.
+      - generated:/app/data/generated
+    # One-shot: run the four pipeline stages sequentially, then exit.
+    command: >
+      sh -c "
+        python data/generate.py &&
+        python data/generate_pdfs.py &&
+        python data/load_db.py &&
+        python data/ingest_pdfs.py
+        chown -R 1001:1001 /app/data/generated
+      "
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+      ingest:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+psycopg://insights:insights_dev_password@db:5432/insights
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token-change-in-production}
+      CORS_ORIGINS: http://localhost:8000
+    volumes:
+      - generated:/app/data/generated
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  generated:

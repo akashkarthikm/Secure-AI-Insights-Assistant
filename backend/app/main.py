@@ -67,14 +67,16 @@ async def unhandled_error_handler(request: Request, exc: Exception):
     )
 
 # CORS for the local Vite dev server (phase 4). Tightened in phase 5.
+import os
+
+cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=cors_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Admin-Token"],
 )
-
 
 @app.get("/health")
 def health():
@@ -131,3 +133,13 @@ def conversation_detail(conversation_id: str):
     if turns is None:
         raise HTTPException(status_code=404, detail="conversation not found")
     return {"conversation_id": conversation_id, "turns": turns}
+
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
+# Serve the React static bundle if it's been built into the image.
+# In dev mode it doesn't exist; the Vite dev server handles the UI on a separate port.
+_static_dir = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if _static_dir.exists():
+    app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="static")
+    

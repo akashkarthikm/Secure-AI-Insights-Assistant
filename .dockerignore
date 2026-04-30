@@ -1,0 +1,42 @@
+# Anything in here won't be sent to the Docker daemon or copied into images.
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Generated artifacts (recreated by the ingest container)
+data/generated/
+
+# Local secrets — must never end up in an image
+.env
+.env.local
+frontend/.env
+frontend/.env.local
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Git metadata
+.git/
+.gitignore
+
+# Docs and tests don't need to be in production images
+README.md
+docs/
+backend/tests/
+
+# This file itself
+.dockerignore
+Dockerfile
+docker-compose*.yml
