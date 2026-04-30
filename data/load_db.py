@@ -15,7 +15,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from sqlalchemy import (
     create_engine, MetaData, Table, Column, Index,
-    String, Integer, Date, Boolean, Numeric, BigInteger,
+    String, Integer, Date, Boolean, Numeric, BigInteger, Text, TIMESTAMP,
 )
 
 load_dotenv()
@@ -90,6 +90,17 @@ regional_performance = Table(
     Column("total_minutes_watched", BigInteger, nullable=False),
     Column("unique_viewers", Integer, nullable=False),
     Column("top_genre", String(40), nullable=False),
+)
+
+conversations = Table(
+    "conversations", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("conversation_id", String(40), nullable=False, index=True),
+    Column("created_at", TIMESTAMP(timezone=True), nullable=False),
+    Column("question", Text, nullable=False),
+    Column("answer", Text, nullable=False),
+    Column("trace_json", Text, nullable=False),     # JSON-serialized list of trace entries
+    Column("sources_json", Text, nullable=False),   # JSON-serialized list of filenames
 )
 
 # ---------- load ----------

@@ -126,3 +126,25 @@ class ComputeAggregateResult(BaseModel):
     aggregation: str
     rows: list[AggregateRow]
     row_count: int
+
+class ToolTraceEntry(BaseModel):
+    """One step in the orchestrator's tool-calling trace."""
+    tool: str
+    args: dict
+    ok: bool
+    result_summary: str
+    error: Optional[str] = None
+    result: Optional[dict] = None  # full result for chart rendering, if structured
+
+
+class ChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question: str = Field(min_length=3, max_length=2000)
+    conversation_id: str = Field(min_length=1, max_length=40)
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    trace: list[ToolTraceEntry]
+    sources: list[str]
+    conversation_id: str
