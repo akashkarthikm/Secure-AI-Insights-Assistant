@@ -64,18 +64,22 @@ def build_movies():
         "production_budget_usd": 60_000_000,
     })
     # Filler titles.
-    for i in range(4, 61):
-        genre = random.choice(GENRES)
-        release = fake.date_between(start_date="-3y", end_date="today")
-        rows.append({
-            "movie_id": f"M{i:04d}",
-            "title": fake.catch_phrase(),
-            "genre": genre,
-            "release_date": release.isoformat(),
-            "runtime_min": random.randint(85, 170),
-            "language": random.choice(LANGUAGES),
-            "production_budget_usd": random.randint(2_000_000, 120_000_000),
-        })
+    # Filler titles, balanced across genres so single outlier titles don't
+    # dominate the genre averages. Total catalog = 3 pinned + 8 genres * 12 = 99 titles.
+    next_id = 4
+    for genre in GENRES:
+        for _ in range(12):
+            release = fake.date_between(start_date="-3y", end_date="today")
+            rows.append({
+                "movie_id": f"M{next_id:04d}",
+                "title": fake.catch_phrase(),
+                "genre": genre,
+                "release_date": release.isoformat(),
+                "runtime_min": random.randint(85, 170),
+                "language": random.choice(LANGUAGES),
+                "production_budget_usd": random.randint(2_000_000, 120_000_000),
+            })
+            next_id += 1
     df = pd.DataFrame(rows)
     df.to_csv(OUT / "movies.csv", index=False)
     print(f"  movies.csv         {len(df):>6} rows")
@@ -138,7 +142,12 @@ def build_watch_activity(movies, viewers, n=50_000):
         elif genre == "Comedy" and watch_date.year == 2025:
             completion_pct = random.uniform(0.20, 0.55)
         else:
-            completion_pct = random.uniform(0.40, 0.95)
+            base = random.uniform(0.55, 0.95)
+            # Drama and Sci-Fi engage better than the platform average,
+            # consistent with the Q3 report narrative.
+            if genre in ("Drama", "Sci-Fi"):
+                base = min(0.99, base + 0.12)
+            completion_pct = base
 
         # Mumbai boost in the most recent month (Nov 2025).
         if city == "Mumbai" and watch_date >= datetime(2025, 11, 1):
