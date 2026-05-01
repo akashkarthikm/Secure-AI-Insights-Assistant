@@ -5,6 +5,12 @@ An AI-powered internal analytics assistant for a fictional entertainment company
 ![Stellar question](picture/Screen.png)
 
 Interactive chat, Multi source answers, Charts included.
+Marked red: Filtered condition Thriller from may 2025 to 2026, followed up by another question answer with chart representation
+![Filter chart](picture/screen1.png)
+
+Marked red: Tool trace calls on the right, and answer source mentioned at the bottom
+![Trace](picture/screen2.png)
+
 
 ## Architecture Diagram
 
@@ -58,6 +64,16 @@ Audit log - JSONL file at data/generated/audit.log. One line per tool call.
 
 **CSV files** - marketing_spend.csv and regional_performance.csv. Read by compute_aggregate for pandas-style analytics.\
 Operational CSVs - movies.csv, viewers.csv, watch_activity.csv, reviews.csv are read once during ingestion and loaded into Postgres tables.
+
+## Security and data handling
+
+- Read-only Postgres sessions for every tool call, enforced at the database level via `SET TRANSACTION READ ONLY` - even buggy code can't write.
+- The LLM (Claude) never gets direct data access. It can only emit calls to three typed tools, each gated by Pydantic schemas with allow-listed enums for metrics, group-by dimensions, and CSV columns.
+- All filter values are bound as parameters, never concatenated into SQL - no injection surface.
+- Document embeddings and retrieval run locally. Viewer data never leaves the server for retrieval.
+- Every tool call is recorded to an append-only audit log with arguments, success, and elapsed time.
+- The admin re-ingestion endpoint is gated by a token (`X-Admin-Token`); chat and read endpoints are open within the deployment but rate-limited at the edge.
+- Secrets (API keys, admin tokens, DB credentials) live in `.env`, which is gitignored. `.env.example` documents the required variables without leaking values.
 
 ## Validation and Error handling
 
@@ -127,3 +143,6 @@ Three services run under Compose:
 1. a Postgres container with persistent volumes for both the relational data and conversation history, 
 2. a one-shot ingest container that handles all data generation and loading (gated by a Postgres health check so it never starts before the database is ready)
 3. an API container that the api waits for via Compose's `service_completed_successfully` condition. 
+
+Assumptions and Tradeoffs:
+![Assumptions and tradeoff doc](Assumptions-Tradeoffs.md)
