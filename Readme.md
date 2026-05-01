@@ -4,7 +4,7 @@ An AI-powered internal analytics assistant for a fictional entertainment company
 
 ![Stellar question](picture/Screen.png)
 
-Interactive chat, Multi source answers, Charts included.\
+Interactive chat, Multi source answers, Charts included.
 
 Marked red: Filtered condition Thriller from may 2025 to 2026, followed up by another question answer with chart representation
 
@@ -24,7 +24,7 @@ Marked red: Tool trace calls on the right, and answer source mentioned at the bo
 • Filters / selectors\
 • Insights panel\
 • Charts / visual summaries\
-• Query history or tool trace\
+• Query history or tool trace
 
 1. A user opens the React frontend in their browser and types a question. The frontend posts it to the **FastAPI gateway**, which validates the input, applies rate limits and the admin token gate where appropriate, and dispatches it to the AI orchestrator.
 2. The orchestrator sends the question via `/chat` endpoint, along with definitions of the three available tools to **Anthropic Claude** over HTTPS, runs a tool calling loop, and returns the assembled answer back through the gateway.
@@ -56,6 +56,8 @@ The audit log captures every tool call to a JSONL file, which the frontend's tra
 **Postgres tables:**\
 
 ![Schema Diagram](picture/Schema.png)
+
+(Schema diagram & architecture diagram created and designed in draw.io platform)
 
 movies - 99 titles, viewers - 5,000 viewers, watch_activity - ~51,000 rows, reviews - ~4,100 rows, marketing_spend - ~1,900 rows, regional_performance - ~1,100 rows.\
 conversations               - one row per Q&A turn
