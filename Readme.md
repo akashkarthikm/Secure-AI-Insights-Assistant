@@ -17,7 +17,7 @@ Interactive chat, Multi source answers, Charts included.
 • Charts / visual summaries\
 • Query history or tool trace\
 
-1. A user opens the React frontend in their browser and types a question. The frontend posts it to the **FastAPI gateway**, which validates the input, applies rate limits and the admin token gate where appropriate, and dispatches it to the AI orchestrator.\
+1. A user opens the React frontend in their browser and types a question. The frontend posts it to the **FastAPI gateway**, which validates the input, applies rate limits and the admin token gate where appropriate, and dispatches it to the AI orchestrator.
 2. The orchestrator sends the question via `/chat` endpoint, along with definitions of the three available tools to **Anthropic Claude** over HTTPS, runs a tool calling loop, and returns the assembled answer back through the gateway.
 
 3. dashed trust boundary is the gated tool layer.
@@ -26,7 +26,7 @@ Claude can only act on the data through three Python tools:
 - **search_documents** for cosine top-k retrieval against the Chroma vector store (PDF)
 - **compute_aggregate** for pandas analytics over the CSV files. 
 
-4. Each tool has Pydantic enforced input validation, allow-listed columns and metrics, and runs against its data source under tight constraints: read-only sessions for the database, in-memory pandas for the CSVs, embedded query for the vector store.\ 
+4. Each tool has Pydantic enforced input validation, allow-listed columns and metrics, and runs against its data source under tight constraints: read-only sessions for the database, in-memory pandas for the CSVs, embedded query for the vector store.
 **Claude never holds a database connection, never opens a file directly.**
 
 5. **Data Ingestion**:
@@ -37,21 +37,19 @@ The audit log captures every tool call to a JSONL file, which the frontend's tra
 
 7. The whole stack runs under **Docker Compose**, which orchestrates three services - the database, the one-shot ingest container, and the api container that serves both the FastAPI backend and the static React bundle on port 8000 - with health checks ensuring everything starts in the right order.
 
-**Backend API / Services** for:\
-- Data ingestion              -  POST /admin/ingest\
-- Querying structured data    - query_metrics tool (reachable via /chat)\
-- Document retrieval          - search_documents tool (reachable via /chat)\
-- AI orchestration            - POST /chat\
-- Analytics generation        - delivered via the tools, accessed through POST /chat\
+**Backend API / Services** for:
+- Data ingestion              -  POST /admin/ingest
+- Querying structured data    - query_metrics tool (reachable via /chat)
+- Document retrieval          - search_documents tool (reachable via /chat)
+- AI orchestration            - POST /chat
+- Analytics generation        - delivered via the tools, accessed through POST /chat
 
 **Postgres tables:**\
-movies                      - 99 titles. movie_id, title, genre, release_date, runtime_min, language, budget.\
-viewers                     - 5,000 fake viewers. viewer_id, age_band, country, city, tier, signup_date.\
-watch_activity              - ~51,000 rows. The fact table. viewer_id, movie_id, watch_date, minutes_watched, completed, device.\
-reviews                     - ~4,100 rows. viewer_id, movie_id, rating, review_date, sentiment_score.\
-marketing_spend             - ~1,900 rows. campaign_id, movie_id, channel, region, week_start, spend_usd, impressions.\
-regional_performance        - ~1,100 rows. Pre-aggregated weekly engagement. city, week_start, total_minutes_watched, unique_viewers, top_genre.\
-conversations               - one row per Q&A turn. id, conversation_id, created_at, question, answer, trace_json, sources_json.
+
+![Schema Diagram](picture/Schema.png)
+
+movies - 99 titles, viewers - 5,000 viewers, watch_activity - ~51,000 rows, reviews - ~4,100 rows, marketing_spend - ~1,900 rows, regional_performance - ~1,100 rows.\
+conversations               - one row per Q&A turn
 
 **Chroma vector store** - one collection (documents), ~25–30 chunks from the five PDFs, embedded with all-MiniLM-L6-v2 (384-dim, cosine similarity).\
 PDF Documents used: audience_behavior_report.pdf, campaign_performance_stellar_run.pdf, content_roadmap_2026.pdf, policy_guidelines.pdf, quarterly_report_q3_2025.pdf
@@ -70,10 +68,10 @@ Validation failures return a structured 422.
 
 ![Test result](picture/Test.png)
 
-**Error handling** : Three layers:\
-- Pydantic rejects bad input at the boundary.\
-- Inside the tool-calling loop, tool failures are caught and fed back to the LLM as tool-result errors so the model can recover.\
-- A global FastAPI exception handler - unhandled errors return a clean 500 with no stack trace leaked, and the real error is logged server-side.\
+**Error handling** : Three layers:
+- Pydantic rejects bad input at the boundary.
+- Inside the tool-calling loop, tool failures are caught and fed back to the LLM as tool-result errors so the model can recover.
+- A global FastAPI exception handler - unhandled errors return a clean 500 with no stack trace leaked, and the real error is logged server-side.
 The frontend renders error responses as red bubbles in the chat so failures stay visible.
 
 ## Repository structure
