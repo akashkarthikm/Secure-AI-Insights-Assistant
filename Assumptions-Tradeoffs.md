@@ -11,4 +11,4 @@
 - **Persistence over caching.** Every chat turn writes to Postgres for audit and history. Caching could save tokens but introduces stale-answer risk on changing data, which is worse than slightly higher cost.
 - **Synchronous orchestration over streaming.** Returns a complete answer rather than token-streaming. Simpler state, easier to audit, slightly worse felt latency. But this approach is better for analytics-style answers or to prepare the charts.
 - **Three specialised tools over one general tool.** SQL, vector search, and pandas live in separate tools because each access pattern wants different validation and a different allow-list. More files, narrower attack surface.
-- **Functional capability over auth at this stage.** Skipped login since the requirement weights architecture and reasoning heavily. The schema and dispatcher are designed to accept a `user_id` cleanly when authentication is added.
+- **Functional capability over auth at this stage.** Skipped login since the requirement weighs architecture and reasoning heavily. The schema and dispatcher are designed to accept a `user_id` cleanly when authentication is added.

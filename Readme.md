@@ -4,11 +4,14 @@ An AI-powered internal analytics assistant for a fictional entertainment company
 
 ![Stellar question](picture/Screen.png)
 
-Interactive chat, Multi source answers, Charts included.
+Interactive chat, Multi source answers, Charts included.\
+
 Marked red: Filtered condition Thriller from may 2025 to 2026, followed up by another question answer with chart representation
+
 ![Filter chart](picture/screen1.png)
 
 Marked red: Tool trace calls on the right, and answer source mentioned at the bottom
+
 ![Trace](picture/screen2.png)
 
 
@@ -144,5 +147,9 @@ Three services run under Compose:
 2. a one-shot ingest container that handles all data generation and loading (gated by a Postgres health check so it never starts before the database is ready)
 3. an API container that the api waits for via Compose's `service_completed_successfully` condition. 
 
+![Docker](picture/docker.png)
+
+The above terminal output displays the docker cli trace call, hitting POST request to Anthropic API through orchestrator for chat function with LLM.
+
 Assumptions and Tradeoffs:
-![Assumptions and tradeoff doc](Assumptions-Tradeoffs.md)
+[Assumptions and tradeoff doc](Assumptions-Tradeoffs.md)
