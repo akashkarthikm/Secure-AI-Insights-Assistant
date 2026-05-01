@@ -1,32 +1,85 @@
 # Secure AI Insights Assistant
 
-An AI-powered internal analytics assistant for a fictional entertainment
-company. Combines structured SQL data, unstructured PDF reports, and CSV
-analytics behind a tool-based access layer.
+An AI-powered internal analytics assistant for a fictional entertainment company. Combines structured SQL data, unstructured PDF reports, and CSV analytics behind a tool-based access layer.
 
-## How it's organised
- 
-Five things sit on top of each other, each with a single job:
- 
-**The data layer.** Six CSVs and five PDFs. Generated synthetically with deliberate signals planted (Stellar Run's August spike, Comedy's slump, Mumbai's growth) so the example questions have actual answers in the data. CSVs are loaded into Postgres; PDFs are chunked, embedded with a local model, and stored in Chroma.
- 
-**The tool layer.** Three Python tools — `query_metrics` (SQL), `search_documents` (PDF retrieval), `compute_aggregate` (CSV analytics). Each one has a Pydantic input schema with allow-listed enums for everything the LLM can choose. Filter values are bound as parameters, never concatenated. The database connection runs in `READ ONLY` transaction mode, enforced by Postgres itself. Every call writes to an audit log.
- 
-**The orchestration layer.** A FastAPI service. The `/chat` endpoint sends the user's question to Claude with the tool definitions attached, runs the tool-calling loop until Claude produces a final answer, and returns the answer plus the full trace. Anthropic prompt caching is enabled on the system prompt and tool definitions to keep token costs down across a session.
- 
-**The persistence layer.** Conversations are stored in Postgres so users can browse and reload past chats. There's an admin-gated `/admin/ingest` endpoint that triggers re-ingestion of any stage of the data pipeline.
- 
-**The frontend.** React + Vite + Tailwind + Recharts. Three columns: history sidebar on the left, chat in the middle, insights panel on the right showing charts (auto-picked based on result shape), the tool trace, and the source list. Filters above the chat let you scope follow-up questions without retyping.
+![Stellar question](picture/Screen.png)
 
+Interactive chat, Multi source answers, Charts included.
+
+## Architecture Diagram
+
+![Architecture Diagram](picture/Architecture Diagram.png)
+
+**Front-end (React Framework)**: 
+• Chat assistant UI
+• Filters / selectors
+• Insights panel
+• Charts / visual summaries
+• Query history or tool trace
+
+A user opens the React frontend in their browser and types a question. The frontend posts it to the FastAPI gateway, which validates the input, applies rate limits and the admin token gate where appropriate, and dispatches it to the AI orchestrator. 
+The orchestrator sends the question via `/chat` endpoint, along with definitions of the three available tools to Anthropic Claude over HTTPS, runs a tool calling loop, and returns the assembled answer back through the gateway.
+
+Everything to the right of the dashed trust boundary is the gated tool layer. 
+Claude can only act on the data through three Python tools: 
+1. query_metrics for structured SQL against PostgreSQL
+2. search_documents for cosine top-k retrieval against the Chroma vector store (PDF)
+3. compute_aggregate for pandas analytics over the CSV files. 
+
+Each tool has Pydantic enforced input validation, allow-listed columns and metrics, and runs against its data source under tight constraints — read-only sessions for the database, in-memory pandas for the CSVs, embedded query for the vector store. Claude never holds a database connection, never opens a file directly.
+
+**Data Ingestion**:
+The ingest pipeline is a one-shot setup step that generates the synthetic data, loads 6 CSVs into Postgres, and builds the vector index from the 5 PDFs — it runs once when the stack first starts and is idempotent on re-runs.
+
+**Logging**:
+The audit log captures every tool call to a JSONL file, which the frontend's trace panel reads to show the user which tools fired with which arguments. 
+
+The whole stack runs under Docker Compose, which orchestrates three services — the database, the one-shot ingest container, and the api container that serves both the FastAPI backend and the static React bundle on port 8000 — with health checks ensuring everything starts in the right order.
+
+**Backend API / Services** for:
+Data ingestion -  POST /admin/ingest
+Querying structured data - query_metrics tool (reachable via /chat)
+Document retrieval - search_documents tool (reachable via /chat)
+AI orchestration - POST /chat
+Analytics generation - analytics is delivered via the tools, accessed through POST /chat
+
+**Postgres tables:**
+movies — 99 titles. movie_id, title, genre, release_date, runtime_min, language, budget.
+viewers — 5,000 fake viewers. viewer_id, age_band, country, city, tier, signup_date.
+watch_activity — ~51,000 rows. The fact table. viewer_id, movie_id, watch_date, minutes_watched, completed, device.
+reviews — ~4,100 rows. viewer_id, movie_id, rating, review_date, sentiment_score.
+marketing_spend — ~1,900 rows. campaign_id, movie_id, channel, region, week_start, spend_usd, impressions.
+regional_performance — ~1,100 rows. Pre-aggregated weekly engagement. city, week_start, total_minutes_watched, unique_viewers, top_genre.
+conversations — one row per Q&A turn. id, conversation_id, created_at, question, answer, trace_json, sources_json.
+
+**Chroma vector store** - one collection (documents), ~25–30 chunks from the five PDFs, embedded with all-MiniLM-L6-v2 (384-dim, cosine similarity).
+PDF Documents used: audience_behavior_report.pdf, campaign_performance_stellar_run.pdf, content_roadmap_2026.pdf, policy_guidelines.pdf, quarterly_report_q3_2025.pdf
+
+Audit log — JSONL file at data/generated/audit.log. One line per tool call.
+
+**CSV files** — marketing_spend.csv and regional_performance.csv. Read by compute_aggregate for pandas-style analytics.
+Operational CSVs — movies.csv, viewers.csv, watch_activity.csv, reviews.csv are read once during ingestion and loaded into Postgres tables.
+
+## Validation and Error handling
+
+**Validation** : Every input is gated by a Pydantic schema with extra="forbid". 
+Categorical fields are enums (Metric, GroupBy, Aggregation, CsvFile, Stage) so only allow-listed values pass. strings have length bounds, numbers have range bounds. 
+The CSV tool adds a second check - column names are validated against a per-file allow-list before reaching pandas. 
+Validation failures return a structured 422.
+
+**Error handling** : Three layers. 
+- Pydantic rejects bad input at the boundary. 
+- Inside the tool-calling loop, tool failures are caught and fed back to the LLM as tool-result errors so the model can recover. 
+- A global FastAPI exception handler — unhandled errors return a clean 500 with no stack trace leaked, and the real error is logged server-side. The frontend renders error responses as red bubbles in the chat so failures stay visible.
 
 ## Repository structure
- 
 ```
 secure-ai-insights/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py            FastAPI app, /chat, /conversations, /admin
 │   │   ├── orchestrator.py    LLM tool-calling loop
+│   │   ├── orchestrator_stub.py  response fallback for offline review (not used)
 │   │   ├── registry.py        Tool registry; the LLM-to-Python bridge
 │   │   ├── tools/             Three tool implementations
 │   │   ├── schemas.py         Pydantic types shared across tools and API
@@ -41,10 +94,36 @@ secure-ai-insights/
 │   ├── generated/             Vector index, audit log (gitignored)
 │   ├── generate.py            CSV generator
 │   ├── generate_pdfs.py       PDF generator
-│   ├── load_db.py             CSV → Postgres loader
-│   └── ingest_pdfs.py         PDF → Chroma ingestion
+│   ├── load_db.py             CSV - Postgres loader
+│   └── ingest_pdfs.py         PDF - Chroma ingestion
 ├── frontend/                  React + Vite + Tailwind app
+├── Dockerfile                 Multi-stage build (Node + Python + runtime)
+├── docker-compose.yml         Three services: db, ingest, api
+├── .dockerignore
 ├── .env                       Secrets (gitignored)
+├── .env.example               Template to create .env file
 ├── .gitignore
 └── README.md
 ```
+
+## Deployment
+
+- Docker Desktop is the only prerequisite needed.
+
+The project is fully containerised. From a fresh clone, the entire stack — Postgres, the data pipeline, and the FastAPI app serving both the chat API and the React frontend — comes up with one command:
+
+```bash
+cp .env.example .env
+# add the Anthropic API key to .env
+docker compose up
+```
+
+The first `up` builds the images, runs a one-shot ingest container that generates the data and populates Postgres and the vector store, then starts the API. (might take some time for first build)
+Subsequent `up` invocations skip the build and start in seconds. Once the api logs `Application startup complete`, the system is ready at `http://localhost:8000`.
+
+Three services run under Compose: 
+1. a Postgres container with persistent volumes for both the relational data and conversation history, 
+2. a one-shot ingest container that handles all data generation and loading (gated by a Postgres health check so it never starts before the database is ready)
+3. an API container that the api waits for via Compose's `service_completed_successfully` condition. 
+
+Docker Desktop is the only prerequisite needed.
